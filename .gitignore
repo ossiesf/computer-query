@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.DS_Store
+
+# Old single-file prototype and the parked CI copy (now in .github/workflows)
+_archive/
+setup/

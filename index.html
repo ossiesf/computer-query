@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Computer Query</title>
+</head>
+<body>
+<main>
+  <header>
+    <h1>COMPUTER QUERY<span class="dev-badge" id="devBadge" hidden>DEV</span></h1>
+    <div class="btns">
+      <select id="modelPicker" aria-label="Model" title="GB = GPU memory needed. ✓ = already downloaded to this device."></select>
+      <button id="settingsButton" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings">Settings</button>
+    </div>
+  </header>
+
+  <div id="status">Starting…</div>
+  <progress id="progress" value="0" max="1" hidden></progress>
+  <div id="devStrip" hidden title="Dev mode data. Click for the full table."></div>
+
+  <div id="log" aria-live="polite"></div>
+
+  <form id="composer">
+    <ul id="cmdMenu" role="listbox" aria-label="Commands" hidden></ul>
+    <textarea id="input" placeholder="Enter query…  (type / for commands)" aria-label="Query"
+      role="combobox" aria-autocomplete="list" aria-controls="cmdMenu" aria-expanded="false"></textarea>
+    <button id="thinkButton" type="button" class="think" aria-pressed="false">
+      <span class="think-label">Think</span>
+      <span id="thinkState" class="think-state">off</span>
+    </button>
+    <button id="sendButton">Send</button>
+    <div class="notice">Preview. Models make mistakes, so verify important facts. All your data stays on your device.</div>
+  </form>
+</main>
+
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <div class="dialog-head">
+    <h2 id="settingsTitle" style="margin:0">Settings</h2>
+    <button class="small" id="closeSettings" aria-label="Close settings">Close (Esc)</button>
+  </div>
+
+  <div class="dialog-body">
+    <p class="help">Settings, notes, and chat history are saved in this browser's localStorage. Model weights are saved in the browser's Cache Storage. Nothing is sent to a server.</p>
+
+    <h2>Model</h2>
+    <p class="help">Choose the model from the menu at the top of the page. Bigger models follow instructions better and know more, but download more and run slower. Auto picks one based on the device check below.</p>
+    <div class="row">
+      <label for="precision">Precision</label>
+      <select id="precision">
+        <option value="auto">Auto</option>
+        <option value="f16">q4f16 (smaller, faster; needs GPU shader-f16)</option>
+        <option value="f32">q4f32 (works on more GPUs; ~20–50% more memory)</option>
+      </select>
+      <div class="help">Weights are stored in 4 bits either way; this sets the precision used for the math. Auto uses f16 when the GPU supports it.</div>
+    </div>
+    <div class="row">
+      <label>Device check</label>
+      <div class="help" id="deviceInfo">Checking…</div>
+    </div>
+    <div class="row">
+      <label for="contextWindow">Context window</label>
+      <select id="contextWindow">
+        <option>1024</option><option>2048</option><option>4096</option><option>8192</option>
+      </select>
+      <div class="help">The most tokens the model can see at once: system prompt + notes + history + reply. Larger uses more GPU memory. Changing it reloads the model.</div>
+    </div>
+    <label class="check"><input type="checkbox" id="autoLoad"><span>Load the model when the page opens<div class="help">The first time, this downloads the model (about 0.4–3.4 GB, depending on the model). After that it loads from this device in seconds. Turn off to load only when you pick a model.</div></span></label>
+    <div class="btns">
+      <button class="small" id="deleteModelButton">Delete the selected model's download</button>
+    </div>
+
+    <h2>Sampling</h2>
+    <div id="sliders"></div>
+    <div class="row">
+      <label for="seed">Seed</label>
+      <input id="seed" type="number" step="1" placeholder="blank = random">
+      <div class="help">Same seed + same settings + same input = same output. Try temperature 1.0 with and without a seed, then ask the same question twice.</div>
+    </div>
+    <div class="btns"><button class="small" id="resetSampling">Reset sampling to defaults</button></div>
+
+    <h2>Learning view</h2>
+    <label class="check"><input type="checkbox" id="showReasoning"><span>Show reasoning<div class="help">When Think is on, each reply gets a collapsible "Reasoning" section with the model's step-by-step thinking. Only the final answer is kept in the conversation history.</div></span></label>
+    <label class="check"><input type="checkbox" id="showLogprobs"><span>Show token probabilities<div class="help">Each token is shaded by how unsure the model was (darker red = less confident). Click a token to see the 5 alternatives it considered.</div></span></label>
+    <label class="check"><input type="checkbox" id="showStats"><span>Show stats<div class="help">Prompt tokens (what was read), output tokens (what was written), speed, and time to first token.</div></span></label>
+    <label class="check"><input type="checkbox" id="showRequest"><span>Show exact request<div class="help">The full message list and parameters sent to the model for each reply. This is everything the model "knows".</div></span></label>
+
+    <h2>Style enforcement</h2>
+    <label class="check"><input type="checkbox" id="styleCanned"><span>Canned replies<div class="help">Relationship questions ("how are you", "do you like me") get a fixed reply and never reach the model.</div></span></label>
+    <div class="row">
+      <label for="styleCheck">Check each answer</label>
+      <select id="styleCheck">
+        <option value="model">With the model (about a second; understands quotes and context)</option>
+        <option value="rules">With word rules (instant; flags any "I", "me", "my"…)</option>
+        <option value="off">Off</option>
+      </select>
+      <div class="help">Checks for first-person words, feelings, greetings, and flattery. Code is always ignored. A small model is a noisy judge: it will sometimes pass or fail an answer wrongly.</div>
+    </div>
+    <label class="check"><input type="checkbox" id="styleFix"><span>Let the model fix answers that fail<div class="help">The model rewrites the answer in style (up to 2 tries), keeping every fact; code is never changed. If no fix passes, the original answer is shown with a "may not match" tag.</div></span></label>
+    <p class="help">Turn these off to see how often the raw model breaks the style rules.</p>
+
+    <h2>System prompt</h2>
+    <textarea id="systemPrompt" aria-label="System prompt" placeholder="None: the model sees only the chat."></textarea>
+    <div class="help">Instructions placed before every conversation. Edits apply to the next message.</div>
+    <div class="btns" style="margin-top:6px"><button class="small" id="resetPrompt">Use ship's-computer prompt</button></div>
+
+    <h2>Notes (memory)</h2>
+    <label class="check"><input type="checkbox" id="useNotes"><span>Include notes in the prompt<div class="help">The model has no memory of its own. "Remembering" means these notes are pasted into the system prompt on every request. Turn on "Show exact request" to see it.</div></span></label>
+    <ol id="notes"></ol>
+    <div class="note-add"><input id="noteInput" type="text" placeholder="e.g. User is studying 8th-grade biology" aria-label="New note"><button class="small" id="addNote">Add</button></div>
+
+    <h2>Data</h2>
+    <p class="help" id="storageInfo">Calculating storage…</p>
+    <div class="btns">
+      <button class="small" id="exportData">Export JSON</button>
+      <button class="small" id="importData">Import JSON</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+      <button class="small" id="clearChat">Clear chat</button>
+      <button class="small" id="resetData">Reset settings, notes, chat</button>
+    </div>
+    <p class="help">Export/Import moves settings, notes, and chat between browsers. Reset keeps downloaded models; use /reset in the chat to delete those too.</p>
+
+    <section id="devSection" hidden>
+      <h2>Dev: model load timings</h2>
+      <p class="help">Dev mode is on (turn off with <code>?dev=0</code>). Every model load is recorded in this browser's IndexedDB. "cold" = weights downloaded; "warm" = weights already cached.</p>
+      <p class="help" id="devSummary"></p>
+      <div style="overflow-x:auto"><table id="devTable"></table></div>
+      <div class="btns" style="margin-top:8px">
+        <button class="small" id="devExportCsv">Export CSV</button>
+        <button class="small" id="devExportJson">Export JSON</button>
+        <button class="small" id="devClear">Clear timings</button>
+      </div>
+
+      <h2>Dev: style checks</h2>
+      <p class="help">Every style check is recorded: verdicts, rewrites, and timings. Use the ✓/✗ buttons under each reply to label whether the shown answer is in style; the summary then shows how often the check agrees with you.</p>
+      <p class="help" id="devStyleSummary" style="white-space:pre-wrap"></p>
+      <div style="overflow-x:auto"><table id="devStyleTable"></table></div>
+      <div class="btns" style="margin-top:8px">
+        <button class="small" id="devStyleExport">Export JSONL</button>
+        <button class="small" id="devStyleClear">Clear style records</button>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
